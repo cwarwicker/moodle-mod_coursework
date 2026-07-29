@@ -1360,10 +1360,6 @@ class mod_coursework_mod_form extends moodleform_mod {
         $this->form()->hideif('automaticagreementstrategy', 'numberofmarkers', 'eq', 1);
         $this->form()->hideif('automaticagreementrange', 'automaticagreementstrategy', 'eq', 'average_grade');
         $this->form()->hideif('automaticagreementrange', 'automaticagreementstrategy', 'eq', 'none');
-        $this->form()->hideif('automaticagreementrange', 'advancedgradingmethod_submissions', 'neq', '');
-
-        // If guide or rubric grading in use, none of the existing auto agreement options will work correctly, so hide for now.
-        $this->form()->hideif('automaticagreementstrategy', 'advancedgradingmethod_submissions', 'neq', "");
 
         $this->form()->addElement(
             'select',
