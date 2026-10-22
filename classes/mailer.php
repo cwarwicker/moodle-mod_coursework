@@ -292,6 +292,27 @@ class mailer {
     }
 
     /**
+     * Send manager marking reminder email to the user.
+     * @param user $user
+     * @param string $subject
+     * @param string $body
+     */
+    public function send_manager_marking_reminder(user $user, string $subject, string $body): void {
+        $eventdata = new message();
+        $eventdata->component = 'mod_coursework';
+        $eventdata->name = 'manager_marking_reminder';
+        $eventdata->userfrom = core_user::get_noreply_user();
+        $eventdata->userto = $user->get_raw_record();
+        $eventdata->subject = $subject;
+        $eventdata->fullmessage = html_to_text($body);
+        $eventdata->fullmessageformat = FORMAT_HTML;
+        $eventdata->fullmessagehtml = $body;
+        $eventdata->smallmessage = html_to_text($body);
+        $eventdata->notification = 1;
+        message_send($eventdata);
+    }
+
+    /**
      * Queue an adhoc task to send the relevant email notification.
      * @param string $type
      * @param int $courseworkid

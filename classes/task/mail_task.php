@@ -45,7 +45,7 @@ class mail_task extends \core\task\adhoc_task {
         }
 
         // Coursework must be set unless we're doing the marker reminders.
-        if (!in_array($data->type, ['initial_marking_reminder', 'agreed_marking_reminder'])) {
+        if (!in_array($data->type, ['initial_marking_reminder', 'agreed_marking_reminder', 'manager_marking_reminder'])) {
             if (!isset($data->coursework)) {
                 mtrace('Task is missing required custom data');
                 return;
@@ -127,6 +127,17 @@ class mail_task extends \core\task\adhoc_task {
                 }
                 $this->send_agreed_marking_reminder($user, (array)$data->extra);
                 break;
+            case 'manager_marking_reminder':
+                if (!isset($data->user)) {
+                    mtrace('Task is missing required custom data');
+                    return;
+                }
+                $user = $this->load_user($data->user);
+                if (!$user) {
+                    return;
+                }
+                $this->send_manager_marking_reminder($user, (array)$data->extra);
+                break;
             default:
                 throw new \coding_exception('Unknown type');
         }
@@ -138,11 +149,15 @@ class mail_task extends \core\task\adhoc_task {
      * @return user|null
      */
     private function load_user(int $userid): ?user {
+        if (isset($this->loadeddata['user'][$userid])) {
+            return $this->loadeddata['user'][$userid];
+        }
         $user = user::get_from_id($userid);
         if (!$user) {
             mtrace("User {$userid} no longer exists, skipping notification.");
         }
-        return $user;
+        $this->loadeddata['user'][$userid] = $user;
+        return $this->loadeddata['user'][$userid];
     }
 
     /**
@@ -188,6 +203,21 @@ class mail_task extends \core\task\adhoc_task {
         ]);
         $mailer = new mailer();
         $mailer->send_initial_marking_reminder($user, $subject, $body);
+    }
+
+    /**
+     * Send email notification for agreed marking reminder.
+     * @param user $user
+     * @param array $extra
+     */
+    private function send_manager_marking_reminder(user $user, array $extra): void {
+        $subject = get_string('reminder:email:manager:agreed:subject', 'mod_coursework');
+        $body = get_string('reminder:email:manager:agreed:body', 'mod_coursework', [
+            'list' => $this->build_manager_activity_list((array)$extra['data']),
+            'due' => $this->build_due_date($extra['period'] ?? null),
+        ]);
+        $mailer = new mailer();
+        $mailer->send_manager_marking_reminder($user, $subject, $body);
     }
 
     /**
@@ -243,6 +273,45 @@ class mail_task extends \core\task\adhoc_task {
             ) . $itemstring;
         }
         return implode('<br>', $activities);
+    }
+
+    /**
+     * Build HTML content for manager activity list.
+     * @param array $extra
+     * @return string
+     */
+    private function build_manager_activity_list(array $extra): string {
+        $markers = [];
+        foreach ($extra['activities'] as $courseworkid => $list) {
+            $list = (array)$list;
+            $coursework = $this->load_coursework((int)$courseworkid);
+            if (!$coursework) {
+                continue;
+            }
+
+            if (isset($list['marking'])) {
+                $markers[] = \html_writer::tag('strong', $coursework->name) .
+                    get_string('reminder:email:initial:item', 'mod_coursework', $extra['total']->marking);
+
+                foreach ((array)$list['marking'] as $markerid => $count) {
+                    $marker = $this->load_user((int)$markerid);
+                    $unmarked = is_array($count) ? ($count['unmarked'] ?? 0) : ($count->unmarked ?? 0);
+                    $markers[] = \html_writer::tag('span', $marker->name()) . ' - ' .
+                        get_string('xsubmissions', 'mod_coursework', $unmarked);
+                }
+
+                $markers[] = '';
+            }
+
+            if (isset($list['agreement'])) {
+                $markers[] = \html_writer::tag('strong', $coursework->name) .
+                    get_string('reminder:email:agreed:item', 'mod_coursework', $extra['total']->agreement);
+                $markers[] = '';
+                $markers[] = '';
+            }
+        }
+
+        return implode('<br>', $markers);
     }
 
     /**

@@ -123,7 +123,12 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the initial marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_initial_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         // Confirm that 3 emails were sent (for the 3 teachers).
@@ -176,7 +181,12 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the initial marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_initial_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         // Confirm that only 2 messages are received, not 4.
@@ -234,13 +244,59 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the initial marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_initial_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         // Confirm that only 1 of the teachers got an email and that it was the one without any feedback given.
         $messages = $sink->get_messages();
         $this->assertCount(1, $messages);
         $this->assertEquals($markerassigned->email, $messages[0]->to);
+    }
+
+    public function test_reminders_task_sends_manager_marking_reminders_for_course_managers_with_unmarked_submissions(): void {
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $coursework = $this->getDataGenerator()->create_module('coursework', [
+            'course' => $course->id,
+            'allocationenabled' => 0,
+            'initialmarkingdeadline' => time() + 12 * HOURSECS,
+            'agreedgrademarkingdeadline' => time() + 12 * HOURSECS,
+        ]);
+
+        $manager = $this->getDataGenerator()->create_and_enrol($course, 'manager');
+        $marker = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $generator = $this->getDataGenerator()->get_plugin_generator('mod_coursework');
+        $generator->create_submission([
+            'courseworkid' => $coursework->id,
+            'allocatableid' => $student->id,
+            'allocatabletype' => 'user',
+            'finalisedstatus' => 1,
+        ], $coursework);
+
+        $sink = $this->redirectEmails();
+        $task = new reminders_task();
+
+        // Execute just the manager marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_manager_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
+        $this->runAdhocTasks(mail_task::class);
+
+        $messages = $sink->get_messages();
+
+        $this->assertCount(1, $messages);
+        $this->assertEquals($manager->email, $messages[0]->to);
+        $this->assertStringContainsString('1 submissions awaiting marking and agreement', $messages[0]->body);
+        $this->assertStringContainsString('1 submissions awaiting agreed final marking', $messages[0]->body);
     }
 
     public function test_reminders_task_sends_agreed_marking_reminders_for_markers_with_unmarked_agreed_submissions(): void {
@@ -295,20 +351,20 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the agreed marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_agreed_marking_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         $messages = $sink->get_messages();
 
-        // The reason this is 6 and not 3, is that the reminders task has 2 methods for agreed marking. One for
-        // due "today" and one for "within 5 days", so these will appear in both.
-        $this->assertCount(6, $messages);
+        $this->assertCount(3, $messages);
         foreach ($messages as $num => $message) {
-            // The first 3 will be for the "within 5 days", the next 3 will be for "Today".
-            if ($num > 2) {
-                $this->assertStringContainsString('due for agreed marking Today', $message->body);
-                $this->assertStringContainsString('3 submissions awaiting agreed final marking', $message->body);
-            }
+            $this->assertStringContainsString('due for agreed marking Today', $message->body);
+            $this->assertStringContainsString('3 submissions awaiting agreed final marking', $message->body);
         }
     }
 
@@ -366,13 +422,17 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the agreed marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_agreed_marking_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         $messages = $sink->get_messages();
 
-        // Same reason here why 2 not 1.
-        $this->assertCount(2, $messages);
+        $this->assertCount(1, $messages);
         $this->assertStringContainsString('1 submissions awaiting agreed final marking', $messages[0]->body);
     }
 
@@ -432,13 +492,17 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the agreed marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_agreed_marking_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task);
+
         $this->runAdhocTasks(mail_task::class);
 
         $messages = $sink->get_messages();
 
-        // Same reason as in previous test for this being 4 not 2.
-        $this->assertCount(4, $messages);
+        $this->assertCount(2, $messages);
         $this->assertEquals($markerassigned->email, $messages[0]->to);
         $this->assertEquals($markerwithfeedback->email, $messages[1]->to);
     }
@@ -490,7 +554,12 @@ final class task_test extends \advanced_testcase {
 
         $sink = $this->redirectEmails();
         $task = new reminders_task();
-        $task->execute();
+
+        // Execute just the agreed marking reminders, otherwise we spawn loads of other reminders.
+        $method = new \ReflectionMethod(reminders_task::class, 'spawn_agreed_marking_deadline_reminders');
+        $method->setAccessible(true);
+        $method->invoke($task, 5);
+
         $this->runAdhocTasks(mail_task::class);
 
         $messages = $sink->get_messages();

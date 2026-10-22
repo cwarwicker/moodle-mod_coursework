@@ -624,6 +624,16 @@ The following assessments are due for initial marking {$a->due}:
 {$a->list}';
 $string['reminder:email:initial:item'] = ' - {$a} submissions awaiting marking and agreement';
 $string['reminder:email:initial:subject'] = 'Outstanding Moodle Marking: Action Required';
+$string['reminder:email:manager:agreed:subject'] = 'Outstanding Moodle Marking: Action Required';
+$string['reminder:email:manager:agreed:body'] = 'Dear Colleague,
+<br><br>
+Our records indicate that you have outstanding marking activity for the assessments below.
+<br><br>
+The following assessments are due for initial marking {$a->due}:
+<br><br>
+<b>Marking Required:</b>
+<br><br>
+{$a->list}';
 $string['remove_filter'] = 'Remove filter: ';
 $string['removeappraisal'] = 'Remove appraisal';
 $string['removefeedback'] = 'Remove feedback';
@@ -815,5 +825,6 @@ $string['viewsubmission'] = 'View submission - {$a}';
 $string['week'] = 'Week';
 $string['weeks'] = 'Weeks';
 $string['withinxdays'] = 'within the next {$a} days';
+$string['xsubmissions'] = '{$a} submissions';
 $string['yesrenamefile'] = 'Yes (you are unable to change this setting as a submission has been made)';
 $string['youmustagreetotheterms'] = 'You must agree to the following terms before submitting:';

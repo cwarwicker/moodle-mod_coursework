@@ -49,4 +49,5 @@ $messageproviders = [
     ],
     'initial_marking_reminder' => [],
     'agreed_marking_reminder' => [],
+    'manager_marking_reminder' => [],
 ];
