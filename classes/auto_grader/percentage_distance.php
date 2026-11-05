@@ -83,12 +83,16 @@ class percentage_distance implements auto_grader {
             return;
         }
 
-        // If we are using an advanced method throughout, don't try to calculate.
-        // But if we're using an advanced method at first, then simple for final grade - do calculate.
+        // Most advanced grading configurations can be automatically calculated, except Rubric when using same method
+        // for final grade.
         if (
-            $this->get_coursework()->is_using_advanced_grading()
-            && $this->get_coursework()->finalstagegrading == 0
-        ) {
+            $this->get_coursework()->get_advanced_grading_active_controller() &&
+            in_array($this->get_coursework()->get_advanced_grading_active_controller()->get_definition()->method, [
+                'rubric',
+                'rubric_ranges',
+            ]) &&
+                $this->get_coursework()->finalstagegrading == 0
+            ) {
             return;
         }
 
@@ -115,10 +119,32 @@ class percentage_distance implements auto_grader {
     }
 
     /**
+     * Get the automatic grade.
+     * @param stdClass|feedback $finalfeedback
      * @return int
      */
-    private function automatic_grade() {
+    private function automatic_grade(stdClass|feedback $finalfeedback) {
+        // Advanced marking.
+        $controller = $this->get_coursework()->get_advanced_grading_active_controller();
+        if ($controller && $controller->get_definition()->method === 'guide') {
+            return marking_guide_calculator::calculate_and_save_criteria_marks(
+                $this->allocatable->get_submission($this->get_coursework()),
+                $this,
+                $finalfeedback,
+            );
+        }
+
+        // Normal marking.
         $grades = $this->grades_as_percentages();
+        return static::perform_calculation($this->get_coursework(), $grades);
+    }
+
+    /**
+     * Perform the calculation.
+     * @param array $grades
+     * @return int
+     */
+    public static function perform_calculation(coursework $coursework, array $grades) {
         return max($grades);
     }
 
@@ -142,7 +168,6 @@ class percentage_distance implements auto_grader {
             [
                 'stageidentifier' => final_agreed::STAGE_FINAL_AGREED_1,
                 'submissionid' => $this->allocatable->get_submission($this->get_coursework())->id(),
-                'grade' => $this->automatic_grade(),
                 'lasteditedbyuser' => 0, // Grade was auto generated - zero here shows no user involved.
                 'isfinalgrade' => 1, // This is an "agreed" final grade.
                 'isautomatic' => 1,
@@ -152,7 +177,9 @@ class percentage_distance implements auto_grader {
             $feedback['feedbackcomment'] = $this->feedback_comments();
         }
 
-        feedback::create($feedback);
+        // Create the feedback first, as advanced grading methods need its id to save their fillings against.
+        $feedback = feedback::create($feedback);
+        $feedback->update_attribute('grade', $this->automatic_grade($feedback));
     }
 
     /**
@@ -163,7 +190,7 @@ class percentage_distance implements auto_grader {
 
         $updatedfeedback = new stdClass();
         $updatedfeedback->id = $feedback->id;
-        $updatedfeedback->grade = $this->automatic_grade();
+        $updatedfeedback->grade = $this->automatic_grade($feedback);
         $updatedfeedback->lasteditedbyuser = 0;
         $updatedfeedback->isautomatic = 1;
 

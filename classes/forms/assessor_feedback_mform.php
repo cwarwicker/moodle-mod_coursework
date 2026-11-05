@@ -256,7 +256,6 @@ class assessor_feedback_mform extends moodleform {
         if (feedback::is_stage_using_advanced_grading($this->coursework, $this->feedback)) {
             $controller = $this->coursework->get_advanced_grading_active_controller();
             $gradinginstance = $controller->get_or_create_instance(0, $this->feedback->assessorid, $this->feedback->id);
-
             $this->feedback->grade = $gradinginstance->submit_and_get_grade(
                 $formdata->advancedgrading,
                 $this->feedback->id

@@ -1198,7 +1198,6 @@ class mod_coursework_mod_form extends moodleform_mod {
         $moodleform->addHelpButton('finalstagegrading', 'finalstagegrading', 'mod_coursework');
         $moodleform->setDefault('finalstagegrading', 0);
         $moodleform->hideif('finalstagegrading', 'numberofmarkers', 'eq', 1);
-        $moodleform->hideif('finalstagegrading', 'advancedgradingmethod_submissions', 'eq', "");
 
         $feedbackexists = 0;
         // disable the setting if at least one feedback exists

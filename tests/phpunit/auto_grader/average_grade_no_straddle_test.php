@@ -174,4 +174,129 @@ final class average_grade_no_straddle_test extends \advanced_testcase {
         // Value 49.999 is in range index 3 when using example ranges (as it's rounded down to 49.99).
         $this->assertEquals(3, average_grade_no_straddle::get_grade_range_index(49.999, $setting));
     }
+
+    /**
+     * Provider for marking guide calculation tests.
+     * @return array[]
+     */
+    public static function provider_average_grade_calculation_marking_guide(): array {
+        return [
+            'mid - no straddle' => ['mid', [0, 1], [0, 2], [0, 1.5], 15],
+            'up - no straddle' => ['up', [0, 1], [0, 2], [0, 2], 20],
+            'down - no straddle' => ['down', [0, 1], [0, 2], [0, 1], 10],
+            'mid - straddle' => ['mid', [0, 1], [4, 5], [], null],
+            'up - straddle' => ['up', [0, 1], [4, 5], [], null],
+            'down - straddle' => ['down', [0, 1], [4, 5], [], null],
+        ];
+    }
+
+    /**
+     * @dataProvider provider_average_grade_calculation_marking_guide
+     * @param string $roundingrule
+     * @param array $marker1grades
+     * @param array $marker2grades
+     * @param array $expectedfinalcriteriamarks
+     * @param float|null $expectedgrade
+     */
+    public function test_average_grade_calculation_marking_guide(
+        string $roundingrule,
+        array $marker1grades,
+        array $marker2grades,
+        array $expectedfinalcriteriamarks,
+        ?float $expectedgrade
+    ): void {
+        global $DB;
+
+        // Create the coursework activity.
+        $coursework = $this->create_a_coursework([
+            'grade' => 100,
+            'numberofmarkers' => 2,
+            'automaticagreementstrategy' => 'average_grade_no_straddle',
+            'automaticagreementrange' => 10,
+            'roundingrule' => $roundingrule,
+            'advancedgradingmethod_submissions' => 'guide',
+        ]);
+
+        $guidegenerator = $this->getDataGenerator()->get_plugin_generator('gradingform_guide');
+        $controller = $guidegenerator->create_instance(
+            $coursework->get_context(),
+            'mod_coursework',
+            'submissions',
+            'Test guide',
+            'Test guide description',
+            [
+                'Criterion 1' => ['description' => 'C1', 'descriptionmarkers' => 'C1 markers', 'maxscore' => 5],
+                'Criterion 2' => ['description' => 'C2', 'descriptionmarkers' => 'C2 markers', 'maxscore' => 5],
+            ]
+        );
+
+        $this->assertEquals('guide', $coursework->get_advanced_grading_active_controller()->get_definition()->method);
+
+        $submission = $this->create_a_submission_for_the_student();
+        $marker1 = $this->create_a_teacher();
+        $marker2 = $this->create_another_teacher();
+
+        // Ids of the guide's criteria, so we can give a mark for each one.
+        $criterion1id = $guidegenerator->get_criterion_for_values($controller, 'Criterion 1')->id;
+        $criterion2id = $guidegenerator->get_criterion_for_values($controller, 'Criterion 2')->id;
+
+        // The marks each marker gives for each criterion, keyed by stage.
+        $criteriamarks = [
+            'assessor_1' => ['marker' => $marker1, 'marks' => [$criterion1id => $marker1grades[0], $criterion2id => $marker1grades[1]]],
+            'assessor_2' => ['marker' => $marker2, 'marks' => [$criterion1id => $marker2grades[0], $criterion2id => $marker2grades[1]]],
+        ];
+
+        // Use the coursework's controller rather than the one returned by the guide generator, as the coursework sets
+        // its grade range (0 - 100). Without that, the guide can't convert the criteria marks into a grade.
+        $activecontroller = $coursework->get_advanced_grading_active_controller();
+
+        $generator = $this->get_coursework_generator();
+        foreach ($criteriamarks as $stage => $data) {
+            // Create the marker's initial feedback.
+            $feedback = $generator->create_feedback([
+                'submissionid' => $submission->id,
+                'assessorid' => $data['marker']->id,
+                'stageidentifier' => $stage,
+            ]);
+
+            // Save their criteria marks against the feedback, and set its grade from them,
+            // in the same way as assessor_feedback_mform::process_data().
+            $criteria = [];
+            foreach ($data['marks'] as $criterionid => $score) {
+                $criteria[$criterionid] = ['score' => $score, 'remark' => ''];
+            }
+            $instance = $activecontroller->get_or_create_instance(0, $feedback->assessorid, $feedback->id);
+            $feedback->grade = $instance->submit_and_get_grade(['criteria' => $criteria], $feedback->id);
+            $feedback->save();
+        }
+
+        // Create automatic grades.
+        $autograder = new average_grade_no_straddle($coursework, $submission->get_allocatable());
+        $autograder->create_auto_grade_if_rules_match();
+
+        // There should now be one automatic agreed final feedback.
+        $finalfeedbacks = $DB->get_records('coursework_feedbacks', [
+            'submissionid' => $submission->id,
+            'stageidentifier' => 'final_agreed_1',
+        ]);
+
+        if ($expectedgrade === null) {
+            $this->assertCount(0, $finalfeedbacks);
+        } else {
+
+            $this->assertCount(1, $finalfeedbacks);
+            $finalfeedback = reset($finalfeedbacks);
+            $this->assertEquals(1, $finalfeedback->isautomatic);
+
+            // Check the criteria marks automatically created for the agreed final grade.
+            $finalinstance = $activecontroller->get_current_instance($finalfeedback->assessorid, $finalfeedback->id);
+            $this->assertNotNull($finalinstance, 'No marking guide criteria marks were saved for the final feedback');
+            $finalcriteria = $finalinstance->get_guide_filling()['criteria'];
+            $this->assertEqualsWithDelta($expectedfinalcriteriamarks[0], (float)$finalcriteria[$criterion1id]['score'], 0.00001);
+            $this->assertEqualsWithDelta($expectedfinalcriteriamarks[1], (float)$finalcriteria[$criterion2id]['score'], 0.00001);
+
+            // And check the final grade itself.
+            $this->assertEqualsWithDelta($expectedgrade, (float)$finalfeedback->grade, 0.00001);
+        }
+    }
 }

@@ -37,7 +37,9 @@ const toggleAutomaticAgreementFields = () => {
         return;
     }
 
-    const shouldHide = gradingMethod.value !== '' && finalStageGrading.value === '0';
+    // Hide the automatic calculation options if it's rubric and not Simple final. Everything else should be okay.
+    const shouldHide = (['rubric', 'rubric_ranges'].includes(gradingMethod.value) &&
+        finalStageGrading.value === '0');
 
     [strategyEl, rangeEl, roundEl].forEach(el => {
         if (shouldHide) {
